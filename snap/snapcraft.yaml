@@ -1,0 +1,494 @@
+name: all-dev-nextcloud
+version: git
+summary: ALL Dev Nextcloud Server - A safe home for all your data
+description: |
+ Access, share and protect your files, calendars, contacts, communication and
+ more at home and in your enterprise.
+
+grade: stable
+confinement: strict
+base: core20
+
+architectures:
+  - build-on: amd64
+  - build-on: arm64
+  - build-on: ppc64el
+
+apps:
+  # Apache daemon
+  apache:
+    command: bin/run-httpd -k start -DFOREGROUND
+    stop-command: bin/httpd-wrapper -k stop
+    reload-command: bin/httpd-wrapper -k graceful
+    daemon: simple
+    restart-condition: always
+    plugs: [network, network-bind, removable-media]
+
+  # MySQL daemon
+  mysql:
+    command: bin/start_mysql
+    stop-command: support-files/mysql.server stop
+    reload-command: bin/reload-mysql
+    daemon: simple
+    restart-condition: always
+    plugs: [network, network-bind]
+
+  # PHP FPM daemon
+  php-fpm:
+    command: bin/start-php-fpm
+    reload-command: bin/reload-php
+    daemon: simple
+    restart-condition: always
+    plugs:
+      - network
+      - network-bind
+
+      # Optional interface for observing network in system settings
+      - network-observe
+
+      # Optional interface for accessing removable media
+      - removable-media
+
+  # redis server daemon
+  redis-server:
+    command: bin/start-redis-server
+    daemon: simple
+    restart-condition: always
+    plugs: [network, network-bind]
+
+  # MySQL client
+  mysql-client:
+    command: bin/run-mysql
+    plugs: [network, network-bind]
+
+  mysqldump:
+    command: bin/run-mysqldump
+    plugs: [network, network-bind]
+
+  # Nextcloud occ command
+  occ:
+    command: bin/occ
+    plugs: [network, network-bind, removable-media]
+
+  enable-https:
+    command: bin/enable-https
+    plugs: [network, network-bind]
+
+  disable-https:
+    command: bin/disable-https
+    plugs: [network, network-bind]
+
+  renew-certs:
+    command: bin/renew-certs
+    daemon: simple
+    restart-condition: always
+    plugs: [network, network-bind]
+
+  nextcloud-cron:
+    command: bin/nextcloud-cron
+    daemon: simple
+    restart-condition: on-failure
+    plugs: [network, network-bind, removable-media]
+
+  # Command for manually installing instead of visiting site to create admin.
+  manual-install:
+    command: bin/manual-install
+    plugs: [network, network-bind, removable-media]
+
+  import:
+    command: bin/import-data
+    plugs: [network, network-bind, removable-media]
+
+  export:
+    command: bin/export-data
+    plugs: [network, network-bind, removable-media]
+
+  # Service for automatically fixing Nextcloud indices, etc.
+  nextcloud-fixer:
+    command: bin/nextcloud-fixer
+    daemon: simple
+    restart-condition: on-failure
+    plugs: [network, network-bind, removable-media]
+
+  logrotate:
+    command: bin/run-logrotate
+    daemon: simple
+    restart-condition: on-failure
+    timer: 00:00 # Run once a day at midnight
+
+hooks:
+  configure:
+    plugs: [network, network-bind, removable-media]
+  pre-refresh:
+    plugs: [network, network-bind, removable-media]
+
+parts:
+  apache:
+    plugin: autotools
+    source: https://archive.apache.org/dist/httpd/httpd-2.4.67.tar.bz2
+    source-checksum: sha256/66cd206637b0d5c446fa7dabe75fe03525da8fb55855876c46288cd88b136aa4
+
+    build-packages:
+      - libbrotli-dev
+      - pkg-config
+      - libapr1-dev
+      - libaprutil1-dev
+      - libpcre2-dev
+      - libssl-dev
+
+    stage-packages:
+      - libbrotli1
+      - libapr1
+      - libaprutil1
+      - libpcre2-8-0
+    
+    autotools-configure-parameters:
+      - --prefix=/
+      - --with-mpm=event
+      - --enable-modules=none
+      - --enable-mods-static="headers proxy proxy_fcgi setenvif env rewrite mime dir authz_core unixd alias ssl socache_shmcb slotmem_shm log_config logio brotli filter"
+    
+    filesets:
+      exclude:
+        - -man
+        - -manual
+        - -htdocs
+        - -include
+        - -build
+        - -conf/httpd.conf
+        - -conf/magic
+        - -conf/original
+        - -conf/extra
+        - -bin/apachectl
+        - -bin/envvars*
+    stage:
+      - $exclude
+    prime:
+      - $exclude
+    
+  apache-customizations:
+    plugin: dump
+    source: src/apache/
+
+  nextcloud:
+    plugin: dump
+    source: https://download.nextcloud.com/server/releases/nextcloud-32.0.9.tar.bz2
+    source-checksum: sha256/fd6d591975efde1caf0e8427a82baa55a4a8b7ae643da29ed83e299c208c1eee
+    organize:
+      '*': htdocs/
+      '.htaccess': htdocs/.htaccess
+      '.user.ini': htdocs/.user.ini
+      '.reuse': htdocs/.reuse
+
+    # This snap automatically updates. No need to include the updater to nag
+    # users. This does not result in an integrity check failure.
+    prime:
+      - -htdocs/apps/updatenotification
+
+  php:
+    plugin: autotools
+    source: https://php.net/get/php-8.3.31.tar.bz2/from/this/mirror
+    source-checksum: sha256/e6986b1fd37eb25402127fe4a7278a3e03b7f9025bb7a4bd292a271bdf930fb9
+    source-type: tar
+    autotools-configure-parameters:
+      - --prefix=$SNAPCRAFT_PART_INSTALL
+      - --enable-fpm
+      - --disable-cgi
+      - --disable-phpdbg
+      - --enable-ctype
+      - --enable-mbstring
+      - --with-zip
+      - --with-pdo-mysql
+      - --with-zlib
+      - --enable-gd
+      - --with-curl
+      - --with-openssl
+      - --with-bz2
+      - --with-sodium
+      - --enable-exif
+      - --enable-intl
+      - --enable-pcntl
+      - --with-jpeg
+      - --with-freetype
+      - --disable-rpath
+      - --enable-ftp
+      - --enable-bcmath
+      - --enable-sysvsem
+
+      # Enable ldap
+      - --with-libdir=lib/$SNAPCRAFT_ARCH_TRIPLET
+      - --with-ldap
+
+      # Enable gmp
+      - --with-gmp
+
+      # Enable argon2
+      - --with-password-argon2
+
+    build-packages:
+      - libxml2-dev
+      - libcurl4-openssl-dev
+      - libpng-dev
+      - libjpeg8-dev
+      - libbz2-dev
+      - libmcrypt-dev
+      - libldap2-dev
+      - libfreetype6-dev
+      - libgmp-dev
+      - libzip-dev
+      - libargon2-0-dev
+      - libsodium-dev
+      - libaio-dev
+      - libaio1
+      - libsqlite3-dev
+
+      # This is no longer bundled with PHP as of v7.4
+      - libonig-dev
+    stage-packages:
+      - libasn1-8-heimdal
+      - libcurl4
+      - libfreetype6
+      - libgssapi3-heimdal
+      - libhcrypto4-heimdal
+      - libheimbase1-heimdal
+      - libheimntlm0-heimdal
+      - libhx509-5-heimdal
+      - libicu66
+      - libjpeg8
+      - libkrb5-26-heimdal
+      - libldap-2.4-2
+      - libnghttp2-14
+      - libpng16-16
+      - libpsl5
+      - libroken18-heimdal
+      - librtmp1
+      - libsasl2-2
+      - libwind0-heimdal
+      - libxml2
+      - libzip5
+      - libargon2-0
+      - libonig5
+      - libsodium23
+      - libaio1
+      - libsqlite3-0
+    prime:
+     - -sbin/
+     - -etc/
+    organize:
+      # Put php-fpm in bin with everything else, not sbin.
+      sbin/php-fpm: bin/php-fpm
+    
+  php-ext-redis:
+    plugin: make
+    source: https://github.com/phpredis/phpredis/archive/6.3.0.tar.gz
+    source-checksum: sha256/cb8f81df1a275599e4f8ddcfec7e1f65ed1953e6f5673649149fd680ebff4cad
+    after:
+      - php
+
+    override-build: |
+      # Prepare the php extension
+      ${SNAPCRAFT_STAGE}/bin/phpize
+
+      # Manually run the configure script
+      ./configure
+
+      # Patch the Makefile to install to the correct location in the snap
+      sed -i.back "s|/parts/php/install/lib/php/extensions/|/parts/php-ext-redis/install/lib/php/extensions/|g" Makefile
+
+      snapcraftctl build
+
+  redis:
+    plugin: make
+    source: https://download.redis.io/releases/redis-8.2.6.tar.gz
+    source-checksum: sha256/78dd7326c5c959202c6c3849d3ea9c61896d78d647c20f6542b52c0917f96eac
+    
+    override-build: |
+      make -j${SNAPCRAFT_PARALLEL_BUILD_COUNT}
+      make install PREFIX="$SNAPCRAFT_PART_INSTALL"
+
+  redis-customizations:
+    plugin: dump
+    source: src/redis/
+    organize:
+      config/*: config/redis/
+    after: [envsubst]
+
+  # Copy over our PHP configuration file.
+  php-customizations:
+    plugin: dump
+    source: src/php/
+    organize:
+      config/*: config/php/
+    stage-packages: [mawk]
+
+  # Copy over our Nextcloud configuration files
+  nextcloud-customizations:
+    plugin: dump
+    source: src/nextcloud/
+    organize:
+      config/: htdocs/config/
+    stage-packages:
+      # jq is needed for parsing occ's json output
+      - jq
+
+      # The collabora appimage requires this
+      - libfontconfig1
+
+  mysql:
+    build-snaps: [cmake]
+    plugin: cmake
+
+    # Get from https://dev.mysql.com/downloads/mysql/
+    source: https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9.tar.gz
+    source-checksum: md5/7b2591fa0b5388f604cc9b8273eab331
+    cmake-parameters:
+      - -DCMAKE_INSTALL_PREFIX=/
+      - -DBUILD_CONFIG=mysql_release
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DWITH_UNIT_TESTS=OFF
+      - -DWITH_EMBEDDED_SERVER=OFF
+      - -DWITH_ARCHIVE_STORAGE_ENGINE=OFF
+      - -DWITH_EXAMPLE_STORAGE_ENGINE=OFF
+      - -DWITH_BLACKHOLE_STORAGE_ENGINE=OFF
+      - -DWITH_FEDERATED_STORAGE_ENGINE=OFF
+      - -DWITH_PARTITION_STORAGE_ENGINE=OFF
+      - -DWITH_PERFSCHEMA_STORAGE_ENGINE=OFF
+      - -DWITH_DEBUG=OFF
+      - -DWITH_INNODB_EXTRA_DEBUG=OFF
+      - -DINSTALL_MYSQLTESTDIR=
+      - -DCMAKE_C_COMPILER=gcc-10
+      - -DCMAKE_CXX_COMPILER=g++-10
+
+    build-environment:
+      - CC: gcc-10
+      - CXX: g++-10
+    override-build: |
+      snapcraftctl build
+      # MySQL v8 is massive. Strip it.
+      find "$SNAPCRAFT_PART_INSTALL/bin" -type f -exec sh -c 'grep -IL . "$1" || strip --strip-all "$1"' sh "{}" \;
+
+    build-packages:
+      - libncurses5-dev
+      - binutils
+      - gcc-10
+      - g++-10
+
+    stage-packages:
+      - libaio1
+
+    stage:
+      # Remove scripts that we'll be replacing with our own
+      - -support-files/mysql.server
+      - -COPYING
+
+      # Remove unused binaries that waste space
+      - -bin/comp_err
+      - -bin/ibd2sdi
+      - -bin/innochecksum
+      - -bin/lz4_decompress
+      - -bin/myisam_ftdump
+      - -bin/myisam*
+      - -bin/mysql_client_test
+      - -bin/mysql_config*
+      - -bin/mysql_secure_installation
+      - -bin/mysql_ssl_rsa_setup
+      - -bin/mysql_tzinfo_to_sql
+      - -bin/mysql_upgrade
+      - -bin/mysqladmin
+      - -bin/mysqlbinlog
+      - -bin/mysqlcheck
+      - -bin/mysqld_multi
+      - -bin/mysqlimport
+      - -bin/mysqlpump
+      - -bin/mysqlrouter*
+      - -bin/mysqlshow
+      - -bin/mysqlslap
+      - -bin/mysqltest*
+      - -bin/perror
+      - -bin/zlib_decompress
+
+  # Copy over our MySQL scripts
+  mysql-customizations:
+    plugin: dump
+    source: src/mysql/
+
+  patches:
+    source: src/patches
+    plugin: dump
+    prime:
+      - -*
+
+  delay-on-failure:
+    plugin: dump
+    source: src/delay-on-failure/
+
+  certbot:
+    plugin: python
+    source: src/https/
+    requirements: ["requirements.txt"]
+    build-packages: [libffi-dev]
+    after: [patches]
+    override-build: |
+      snapcraftctl build
+      patch -p1 -d $SNAPCRAFT_PART_INSTALL/lib/python3*/site-packages/certbot < $SNAPCRAFT_STAGE/certbot-remove-default-config-files.patch
+      patch -p1 -d $SNAPCRAFT_PART_INSTALL/lib/python3*/site-packages/certbot < $SNAPCRAFT_STAGE/certbot-remove-storage-chown.patch
+    override-prime: |
+      snapcraftctl prime
+      cd "$SNAPCRAFT_PRIME/lib/python3.8/site-packages/"
+      
+      # If we have the dir with the underscore, make a link with the dot.
+      # This is needed to solve a issue affecting arm64. See #3461
+      for pkg in zope_interface zope_hookable zope_proxy
+      do
+        for filename in ./$pkg-*.dist-info
+        do
+          if [ -d "$filename" ]; then
+            # Replace underscores in pkg name, then strip the ./pkg prefix from filename
+            ln -sf "$filename" "${pkg//_/.}${filename#./$pkg}"
+          fi
+        done
+      done
+
+  setup-https:
+    plugin: dump
+    source: src/https/
+    stage-packages: [openssl]
+    stage: [-etc/ssl, -requirements.txt]
+
+  import-export:
+    plugin: dump
+    source: src/import-export
+    stage-packages: [rsync]
+
+  common:
+    plugin: dump
+    source: src/common/
+
+  hooks:
+    plugin: dump
+    source: src/hooks/
+    organize:
+      bin/: snap/hooks/
+    stage-packages: [curl]
+
+  logrotate:
+    plugin: dump
+    source: src/logrotate/
+    organize:
+      config/*: config/logrotate/
+      usr/sbin/*: bin/
+    stage-packages: [logrotate]
+    stage:
+      - bin/*
+      - config/*
+      - utilities/*
+    after: [envsubst]
+
+  migrations:
+    plugin: dump
+    source: src/migrations/
+
+  envsubst:
+    plugin: nil
+    stage-packages: [gettext-base]
+    stage: [usr/bin/envsubst]

@@ -1,0 +1,80 @@
+name: Run tests against changes
+
+on:
+  pull_request:
+    branches:
+      - '*'
+  push:
+    branches:
+      - master
+      - develop
+      - '[0-9]+'
+    tags:
+      - '*'
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -qq shellcheck
+
+      - name: Run tests
+        run: ./tests/run-tests.sh static
+
+  unit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -qq curl git
+
+      - name: Run tests
+        run: ./tests/run-tests.sh unit
+
+  integration:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install dependencies
+        run: sudo apt-get update -qq && sudo snap refresh lxd && sudo lxd init --auto && sudo snap install --classic --channel=8.x/stable snapcraft
+
+      # See https://andreas.scherbaum.la/post/2023-01-18_fix-lxc-network-issues-in-ubuntu-22.04/  
+      - name: Disable Docker firewall
+        run: sudo iptables -I DOCKER-USER -i lxdbr0 -o eth0 -j ACCEPT && sudo iptables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+      # Using sudo here because our CI user isn't a member of the lxd group
+      - name: Build snap
+        run: sudo snapcraft pack --use-lxd
+
+      - name: Review snap
+        run: sudo snap install review-tools && /snap/bin/review-tools.snap-review *.snap
+
+      - name: Install the snap
+        run: sudo snap install *.snap --dangerous
+
+      - name: Setup ruby
+        uses: ruby/setup-ruby@c4e5b1316158f92e3d49443a9d58b31d25ac0f8f # v1.306.0
+        with:
+          working-directory: tests
+          bundler-cache: true
+
+      - name: Run integration tests
+        working-directory: tests
+        run: bundle exec ./run-tests.sh integration
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snap
+          path: '*.snap'
