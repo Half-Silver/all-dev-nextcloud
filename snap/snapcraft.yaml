@@ -7,7 +7,7 @@ description: |
 
 grade: stable
 confinement: strict
-base: core20
+base: core24
 
 architectures:
   - build-on: amd64
@@ -239,37 +239,36 @@ parts:
       - libargon2-0-dev
       - libsodium-dev
       - libaio-dev
-      - libaio1
       - libsqlite3-dev
 
       # This is no longer bundled with PHP as of v7.4
       - libonig-dev
     stage-packages:
-      - libasn1-8-heimdal
-      - libcurl4
+      - libasn1-8t64-heimdal
+      - libcurl4t64
       - libfreetype6
       - libgssapi3-heimdal
-      - libhcrypto4-heimdal
+      - libhcrypto5-heimdal
       - libheimbase1-heimdal
       - libheimntlm0-heimdal
-      - libhx509-5-heimdal
-      - libicu66
+      - libhx509-5t64-heimdal
+      - libicu74
       - libjpeg8
       - libkrb5-26-heimdal
-      - libldap-2.4-2
+      - libldap2
       - libnghttp2-14
-      - libpng16-16
-      - libpsl5
-      - libroken18-heimdal
+      - libpng16-16t64
+      - libpsl5t64
+      - libroken19-heimdal
       - librtmp1
       - libsasl2-2
       - libwind0-heimdal
       - libxml2
-      - libzip5
-      - libargon2-0
+      - libzip4t64
+      - libargon2-1
       - libonig5
       - libsodium23
-      - libaio1
+      - libaio1t64
       - libsqlite3-0
     prime:
      - -sbin/
@@ -374,7 +373,7 @@ parts:
       - g++-10
 
     stage-packages:
-      - libaio1
+      - libaio1t64
 
     stage:
       # Remove scripts that we'll be replacing with our own
@@ -434,7 +433,7 @@ parts:
       patch -p1 -d $SNAPCRAFT_PART_INSTALL/lib/python3*/site-packages/certbot < $SNAPCRAFT_STAGE/certbot-remove-storage-chown.patch
     override-prime: |
       snapcraftctl prime
-      cd "$SNAPCRAFT_PRIME/lib/python3.8/site-packages/"
+      cd "$SNAPCRAFT_PRIME/lib/python3.12/site-packages/"
       
       # If we have the dir with the underscore, make a link with the dot.
       # This is needed to solve a issue affecting arm64. See #3461
