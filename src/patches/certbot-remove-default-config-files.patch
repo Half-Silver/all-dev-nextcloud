@@ -1,5 +1,5 @@
---- a/constants.py	2019-04-25 13:54:51.740610037 -0700
-+++ b/constants.py	2019-04-25 13:55:14.996430304 -0700
+--- a/_internal/constants.py	2024-01-01 00:00:00.000000000 +0000
++++ b/_internal/constants.py	2024-01-01 00:00:00.000000000 +0000
 @@ -15,12 +15,7 @@
  """Plugins Setuptools entry point before rename."""
  

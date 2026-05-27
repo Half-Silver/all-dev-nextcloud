@@ -1,5 +1,5 @@
---- a/compat/filesystem.py	2026-03-16 22:05:19.000000000 +0000
-+++ b/compat/filesystem.py	2026-03-16 22:05:38.000000000 +0000
+--- a/compat/filesystem.py	2024-01-01 00:00:00.000000000 +0000
++++ b/compat/filesystem.py	2024-01-01 00:00:00.000000000 +0000
 @@ -69,7 +69,6 @@
          stats = os.stat(src)
          user_id = stats.st_uid if copy_user else -1
