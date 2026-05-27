@@ -9,10 +9,10 @@ grade: stable
 confinement: strict
 base: core24
 
-architectures:
-  - build-on: amd64
-  - build-on: arm64
-  - build-on: ppc64el
+platforms:
+  amd64:
+  arm64:
+  ppc64el:
 
 apps:
   # Apache daemon
@@ -148,23 +148,30 @@ parts:
       - --enable-modules=none
       - --enable-mods-static="headers proxy proxy_fcgi setenvif env rewrite mime dir authz_core unixd alias ssl socache_shmcb slotmem_shm log_config logio brotli filter"
     
-    filesets:
-      exclude:
-        - -man
-        - -manual
-        - -htdocs
-        - -include
-        - -build
-        - -conf/httpd.conf
-        - -conf/magic
-        - -conf/original
-        - -conf/extra
-        - -bin/apachectl
-        - -bin/envvars*
     stage:
-      - $exclude
+      - -man
+      - -manual
+      - -htdocs
+      - -include
+      - -build
+      - -conf/httpd.conf
+      - -conf/magic
+      - -conf/original
+      - -conf/extra
+      - -bin/apachectl
+      - -bin/envvars*
     prime:
-      - $exclude
+      - -man
+      - -manual
+      - -htdocs
+      - -include
+      - -build
+      - -conf/httpd.conf
+      - -conf/magic
+      - -conf/original
+      - -conf/extra
+      - -bin/apachectl
+      - -bin/envvars*
     
   apache-customizations:
     plugin: dump
@@ -424,7 +431,8 @@ parts:
   certbot:
     plugin: python
     source: src/https/
-    requirements: ["requirements.txt"]
+    python-requirements:
+      - requirements.txt
     build-packages: [libffi-dev]
     after: [patches]
     override-build: |
