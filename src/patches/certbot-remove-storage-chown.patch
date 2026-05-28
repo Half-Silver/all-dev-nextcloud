@@ -1,5 +1,5 @@
---- a/certbot/compat/filesystem.py
-+++ b/certbot/compat/filesystem.py
+--- a/compat/filesystem.py
++++ b/compat/filesystem.py
 @@ -124,7 +124,6 @@
          # On Windows, os.chown does not exist. This is checked through POSIX_MODE value,
          # but MyPy/PyLint does not know it and raises an error here on Windows.

@@ -1,5 +1,5 @@
---- a/certbot/_internal/constants.py
-+++ b/certbot/_internal/constants.py
+--- a/_internal/constants.py
++++ b/_internal/constants.py
 @@ -22,12 +22,7 @@
  """Plugins Setuptools entry point before rename."""
  
