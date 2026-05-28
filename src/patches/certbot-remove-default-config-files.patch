@@ -1,6 +1,6 @@
---- a/_internal/constants.py	2024-01-01 00:00:00.000000000 +0000
-+++ b/_internal/constants.py	2024-01-01 00:00:00.000000000 +0000
-@@ -15,11 +15,7 @@
+--- a/certbot/_internal/constants.py
++++ b/certbot/_internal/constants.py
+@@ -22,12 +22,7 @@
  """Plugins Setuptools entry point before rename."""
  
  CLI_DEFAULTS: Dict[str, Any] = dict(  # pylint: disable=use-dict-literal
@@ -14,5 +14,3 @@
  
      # Main parser
      verbose_count=0,
-
-# Made with Bob
