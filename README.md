@@ -1,227 +1,187 @@
-# Snappy Nextcloud
+# all-dev-nextcloud
 
-Nextcloud server packaged as a snap. It consists of:
+A complete Nextcloud server snap package providing secure file storage, calendar, contacts, and collaboration features with Apache, MySQL, PHP-FPM, and Redis.
 
-- Nextcloud 32
-- Apache 2.4
-- PHP 8.3
-- MySQL 8.4
-- Redis 8.2
+## Quick Start
 
-## How to install
+```bash
+# Install the snap
+sudo snap install all-dev-nextcloud
 
-[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-white.svg)](https://snapcraft.io/nextcloud)
+# Configure admin credentials
+sudo snap set all-dev-nextcloud admin-username="admin"
+sudo snap set all-dev-nextcloud admin-password="your-secure-password"
 
-There are a [number of releases available][1]. By default you'll get the newest
-stable one, but you may be interested in others.
+# Set trusted domain
+sudo snap set all-dev-nextcloud trusted-domains="your-domain.com"
 
-## How to use
+# Access Nextcloud
+# Open browser to http://your-server-ip
+```
 
-Upon visiting the Nextcloud installation for the first time, you'll be prompted
-for an admin username and password. After you provide that information you'll be
-logged in and able to create users, install apps, and upload files.
+## Features
 
-Note that this snap includes a service that runs cron.php every 5 minutes,
-which will automatically change the cron admin setting to Cron for you.
+- **Complete Nextcloud Server** (v32.0.9) - Full-featured cloud storage and collaboration
+- **Apache 2.4.67** - High-performance web server
+- **MySQL 8.4.9** - Reliable database backend
+- **PHP 8.3.31 with FPM** - Fast PHP processing
+- **Redis 8.2.6** - Memory caching for performance
+- **HTTPS Support** - Built-in Let's Encrypt integration
+- **Auto Certificate Renewal** - Automatic HTTPS certificate management
+- **Data Import/Export** - Easy backup and migration
+- **Cron Jobs** - Background task processing
+- **Log Rotation** - Automatic log management
 
+## Services
 
-### Removable media
+The snap runs multiple services:
+- `apache` - Web server
+- `mysql` - Database server
+- `php-fpm` - PHP processor
+- `redis-server` - Cache server
+- `nextcloud-cron` - Background jobs
+- `nextcloud-fixer` - Maintenance tasks
+- `renew-certs` - Certificate renewal
+- `logrotate` - Log management
 
-Also note that the interface providing the ability to access removable media is
-not automatically connected upon install, so if you'd like to use external
-storage (or otherwise use a device in `/media` or `/mnt` for data), you need to
-give the snap permission to access removable media by connecting that
-interface:
+## Configuration
 
-    $ sudo snap connect nextcloud:removable-media
+### Basic Setup
 
+```bash
+# Set admin credentials
+sudo snap set all-dev-nextcloud admin-username="admin"
+sudo snap set all-dev-nextcloud admin-password="SecurePass123"
 
-### System monitoring
+# Configure trusted domains
+sudo snap set all-dev-nextcloud trusted-domains="example.com,192.168.1.100"
 
-The System application requires a bit more access to the system than the snap
-uses by default (e.g. the ability to monitor network hardware, etc.). If you'd
-like to utilize those features, you'll need to connect the interface that
-allows that kind of access:
+# Set custom ports (optional)
+sudo snap set all-dev-nextcloud http-port=8080
+sudo snap set all-dev-nextcloud https-port=8443
+```
 
-    $ sudo snap connect nextcloud:network-observe
+### Enable HTTPS
 
+```bash
+# With Let's Encrypt
+sudo all-dev-nextcloud.enable-https lets-encrypt cloud.example.com admin@example.com
 
-### Configuration
+# With self-signed certificate
+sudo all-dev-nextcloud.enable-https self-signed cloud.example.com
 
-Beyond the typical Nextcloud configuration (either by using `nextcloud.occ` or
-editing `/var/snap/nextcloud/current/nextcloud/config/config.php`), the snap
-exposes extra configuration options via the `snap set` command.
+# Disable HTTPS
+sudo all-dev-nextcloud.disable-https
+```
 
+## Common Commands
 
-#### HTTP/HTTPS port configuration
+### Administrative
 
-By default, the snap will listen on port 80. If you enable HTTPS, it will listen
-on both 80 and 443, and HTTP traffic will be redirected to HTTPS. But perhaps
-you're putting the snap behind a proxy of some kind, in which case you probably
-want to change those ports.
+```bash
+# Run occ commands
+sudo all-dev-nextcloud.occ <command>
 
-If you'd like to change the HTTP port (say, to port 81), run:
+# List users
+sudo all-dev-nextcloud.occ user:list
 
-    $ sudo snap set nextcloud ports.http=81
+# Add user
+sudo all-dev-nextcloud.occ user:add username
 
-To change the HTTPS port (say, to port 444), run:
+# Enable app
+sudo all-dev-nextcloud.occ app:enable calendar
 
-    $ sudo snap set nextcloud ports.https=444
+# System status
+sudo all-dev-nextcloud.occ status
+```
 
-Note that, assuming HTTPS is enabled, this will cause HTTP traffic to be
-redirected to port 444. You can specify both of these simultaneously as well:
+### Database
 
-    $ sudo snap set nextcloud ports.http=81 ports.https=444
+```bash
+# Access MySQL
+sudo all-dev-nextcloud.mysql-client
 
-**Note:** Let's Encrypt will expect that Nextcloud is exposed on ports 80 and
-443. If you change ports and _don't_ put Nextcloud behind a proxy such that
-ports 80 and 443 are sent to Nextcloud for that domain name, Let's Encrypt will
-be unable to verify ownership of your domain and will not grant certificates.
+# Backup database
+sudo all-dev-nextcloud.mysqldump nextcloud > backup.sql
+```
 
-**Also note:** Nextcloud's automatic hostname detection can fail when behind
-a proxy; you might notice it redirecting incorrectly. If this happens, override
-the automatic detection (including the port if necessary), e.g.:
+### Data Management
 
-    $ sudo nextcloud.occ config:system:set overwritehost --value="example.com:81"
+```bash
+# Export data
+sudo all-dev-nextcloud.export
 
+# Import data
+sudo all-dev-nextcloud.import
+```
 
-#### PHP Memory limit configuration
+## Monitoring
 
-By default, PHP will use 128M as the memory limit. If you notice images not
-getting previews generated, or errors about memory exhaustion in your Nextcloud
-log, you may need to set this to a higher value.
+```bash
+# Check service status
+sudo snap services all-dev-nextcloud
 
-If you'd like to set the memory limit to a higher value (say, 512M), run:
+# View logs
+sudo snap logs all-dev-nextcloud.apache
+sudo snap logs all-dev-nextcloud.mysql
+sudo snap logs all-dev-nextcloud.php-fpm
 
-    $ sudo snap set nextcloud php.memory-limit=512M
+# System check
+sudo all-dev-nextcloud.occ check
+```
 
-To set it to be unlimited (not recommended), use -1:
+## Troubleshooting
 
-    $ sudo snap set nextcloud php.memory-limit=-1
+### Cannot Access Web Interface
 
+```bash
+# Restart services
+sudo snap restart all-dev-nextcloud
 
-#### Cronjob interval configuration
+# Check firewall
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+```
 
-By default the cronjob interval is 5 minutes.
+### Database Issues
 
-To adjust it (say, 10 minutes) simply run:
+```bash
+# Restart MySQL
+sudo snap restart all-dev-nextcloud.mysql
 
-    $ sudo snap set nextcloud nextcloud.cron-interval=10m
+# Check logs
+sudo snap logs all-dev-nextcloud.mysql
+```
 
-If you want to disable the cronjob completely, run:
+### Trusted Domain Error
 
-    $ sudo snap set nextcloud nextcloud.cron-interval=-1
+```bash
+# Add trusted domain
+sudo snap set all-dev-nextcloud trusted-domains="example.com,192.168.1.100"
 
-To reenable it again simply set the `nextcloud.cron-interval` snap variable to a value that isn't `-1`
+# Or use occ
+sudo all-dev-nextcloud.occ config:system:set trusted_domains 1 --value=example.com
+```
 
+## Documentation
 
-#### HTTP compression configuration
+For detailed deployment instructions, configuration options, and troubleshooting, see:
+- [Deployment Guide](docs/deployment-guide.md)
+- [Nextcloud Documentation](https://docs.nextcloud.com/)
 
-By default, the snap does not enable HTTP compression. To enable it, run:
+## Security
 
-    $ sudo snap set nextcloud http.compression=true
+- Use strong passwords (minimum 12 characters)
+- Enable HTTPS for production
+- Configure trusted domains
+- Keep snap updated: `sudo snap refresh all-dev-nextcloud`
+- Enable two-factor authentication
+- Regular backups
 
-To disable it, run:
+## Support
 
-    $ sudo snap set nextcloud http.compression=false
+For issues and support, please refer to the ALL platform documentation and support channels.
 
+## License
 
-#### Reverse Proxy for Files High Performance Backend
-
-This option simply enables the reverse proxy configuration mentioned in the [Client Push README](https://github.com/nextcloud/notify_push#apache), that is the recommended way to setup the `notify_push` component.
-Read the complete instructions in [our wiki](https://github.com/nextcloud-snap/nextcloud-snap/wiki/Configure-HPB-client-push-for-Nextcloud-snap).
-
-
-#### Debug mode
-
-By default, the snap installs itself in production mode, which prevents Apache
-and PHP from providing any detailed version or library information in the HTTP
-headers and error pages. Debug mode can be enabled with:
-
-    $ sudo snap set nextcloud mode=debug
-
-"debug" and "production" are the only valid modes.
-
-
-### Included CLI utilities
-
-There are a few CLI utilities included:
-
-- `nextcloud.occ`:
-    - Nextcloud's `occ` configuration tool. You can always edit the config file
-      directly (`/var/snap/nextcloud/current/nextcloud/config/config.php`) but
-      the configuration tool provides a CLI interface for it. See
-      `nextcloud.occ -h` for more information. Note that it requires `sudo`.
-- `nextcloud.mysql-client`:
-    - MySQL client preconfigured to communicate with Nextcloud MySQL server.
-      This may be useful in case you need to migrate Nextcloud installations.
-      Note that it requires `sudo`.
-- `nextcloud.mysqldump`:
-    - Dump Nextcloud database to stdout. You should probaby redirect its output
-      to a file. Note that it requires `sudo`.
-- `nextcloud.enable-https`:
-    - Enable HTTPS via self-signed certificates, Let's Encrypt, or custom
-      certificates. HTTP will redirect to HTTPS. Non-custom certificates will
-      automatically be kept up-to-date. See `nextcloud.enable-https -h` for more
-      information. Note that it requires `sudo`.
-- `nextcloud.disable-https`:
-    - Disable HTTPS (does not remove certificates). Note that it requires
-      `sudo`.
-- `nextcloud.manual-install`:
-    - Manually install Nextcloud instead of visiting it in your browser. This
-      allows you to create the admin user via the CLI. Note that it requires
-      `sudo`.
-- `nextcloud.export`:
-    - Export data suitable for migrating servers. By default this includes the
-      Nextcloud database, configuration, and data. See `nextcloud.export -h` for
-      more information. Note that it requires `sudo`.
-- `nextcloud.import`:
-    - Import data exported from another Nextcloud snap instance (via
-      `nextcloud.export`). By default this imports the database, config, and
-      data. See `nextcloud.import -h` for more information. Note that it
-      requires `sudo`.
-
-
-## Where is my stuff?
-
-- `$SNAP_DATA` (`/var/snap/nextcloud/current/` by default)
-    - Logs (Apache, PHP, MySQL, Redis, and Nextcloud logs)
-    - Keys and certificates
-    - MySQL database
-    - Redis database
-    - Nextcloud config
-    - Any Nextcloud apps installed by the user
-- `$SNAP_COMMON` (`/var/snap/nextcloud/common/` by default)
-    - Nextcloud data
-
-
-## Hacking
-
-If you change something in the snap, build it, install it, and you can run a
-suite of acceptance tests against it. The tests are written in ruby, using
-capybara and rspec. To run the tests, you first need to install a few
-dependencies:
-
-    $ sudo apt install gcc g++ make qt5-default libqt5webkit5-dev ruby-dev zlib1g-dev
-    $ sudo gem install bundle
-    $ cd tests/
-    $ bundle install
-
-Additionally, if you do not have X configured, install the following for a
-'fake' X server.
-
-    $ sudo apt install xvfb
-
-Make sure the snap has a user called "admin" with password "admin" (used for
-login tests):
-
-    $ sudo nextcloud.manual-install admin admin
-
-And finally, run the tests:
-
-    $ cd tests/
-    $ rake test
-
-[1]: https://github.com/nextcloud/nextcloud-snap/wiki/Release-strategy
-
-## See our [wiki](https://github.com/nextcloud-snap/nextcloud-snap/wiki) for more information
+This snap package bundles multiple open-source components. See individual component licenses for details.
