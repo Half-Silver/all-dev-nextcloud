@@ -1,8 +1,6 @@
 --- a/_internal/constants.py
 +++ b/_internal/constants.py
-@@ -22,12 +22,7 @@
- """Plugins Setuptools entry point before rename."""
- 
+@@ -24,7 +24,2 @@
  CLI_DEFAULTS: Dict[str, Any] = dict(  # pylint: disable=use-dict-literal
 -    config_files=[
 -        os.path.join(misc.get_default_folder('config'), 'cli.ini'),
@@ -11,6 +9,3 @@
 -                     "letsencrypt", "cli.ini"),
 -    ],
 +    config_files=[],
- 
-     # Main parser
-     verbose_count=0,
