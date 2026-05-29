@@ -378,6 +378,7 @@ parts:
       - binutils
       - gcc-10
       - g++-10
+      - libtirpc-dev
 
     stage-packages:
       - libaio1t64
