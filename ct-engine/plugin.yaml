@@ -1,0 +1,36 @@
+app:
+  name: all-dev-nextcloud
+  version: "git"
+
+# Sidecar mode.
+#
+# Nextcloud runs its own snapd-managed daemons (apache, mysql, php-fpm,
+# redis-server, cron, …), with Apache serving the web UI / API over HTTP on
+# port 80 (HTTPS on 443 once enabled). The CT engine does NOT launch or manage
+# those daemons — it runs as a lightweight reporting sidecar that
+# validates/persists the config Control Tower pushes via `snap set` and streams
+# status callbacks back to CT.
+run:
+  command: ""
+
+# Status reported on the initial and periodic callbacks. Apache serves the
+# Nextcloud web UI over HTTP on port 80 by default (see the `apache` app and
+# src/apache/utilities/apache-utilities).
+sidecar:
+  status_command: "hostname -I | awk '{print \"Nextcloud: http://\" $1}'"
+
+output:
+  mode: logs
+  interval: 60
+  initial_event: "message_initial"
+  periodic_event: "message"
+  stop_event: "deployment_stop"
+
+# Configuration schema — intentionally empty.
+#
+# Nextcloud is configured through its own snap options (ports.*, php.*,
+# nextcloud.*, mode, …) handled by the snap's own configure hook, plus its web
+# UI / occ. The snap exposes no extra app settings for Control Tower to push
+# via `snap set`. Only the automatic ct-* keys (handled by the engine itself,
+# all lowercase/hyphen) are used.
+config: {}

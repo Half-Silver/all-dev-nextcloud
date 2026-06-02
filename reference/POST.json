@@ -1,0 +1,50 @@
+{
+  "snaps": [
+    {
+      "name": "all-dev-nextcloud",
+      "refresh": true
+    }
+  ],
+  "snap_config": [
+    {
+      "snap": "all-dev-nextcloud",
+      "settings": {
+        "ct-node-id": "<ALL_APP_NODE_ID>",
+        "ct-callback-url": "<ALL_APP_CALLBACK_URL>",
+        "ct-deployment-id": "<ALL_APP_DEPLOYMENT_ID>"
+      }
+    }
+  ],
+  "ignore_failures": false,
+  "pre_service_actions": [],
+  "post_service_actions": [
+    {
+      "names": [
+        "all-dev-nextcloud.ct-engine"
+      ],
+      "action": "restart"
+    }
+  ],
+  "interface_connections": [
+    {
+      "plug": "all-dev-nextcloud:network",
+      "slot": ":network",
+      "action": "connect"
+    },
+    {
+      "plug": "all-dev-nextcloud:network-bind",
+      "slot": ":network-bind",
+      "action": "connect"
+    },
+    {
+      "plug": "all-dev-nextcloud:network-observe",
+      "slot": ":network-observe",
+      "action": "connect"
+    },
+    {
+      "plug": "all-dev-nextcloud:removable-media",
+      "slot": ":removable-media",
+      "action": "connect"
+    }
+  ]
+}

@@ -116,6 +116,19 @@ apps:
     restart-condition: on-failure
     timer: 00:00 # Run once a day at midnight
 
+  # Control Tower integration sidecar. Runs alongside Nextcloud's own daemons
+  # (it does not manage them): validates/persists the config CT pushes via
+  # `snap set` and streams status callbacks to ct-callback-url. Driven by
+  # ct-engine/plugin.yaml (sidecar mode).
+  ct-engine:
+    command: bin/ct-engine-run run
+    daemon: simple
+    install-mode: enable
+    restart-condition: always
+    plugs:
+      - network
+      - network-bind
+
 hooks:
   configure:
     plugs: [network, network-bind, removable-media]
@@ -500,3 +513,27 @@ parts:
     plugin: nil
     stage-packages: [gettext-base]
     stage: [usr/bin/envsubst]
+
+  # Control Tower engine: the ct-engine python script, its launcher wrapper,
+  # and its plugin.yaml manifest. The launcher resolves the bundled python3
+  # (staged by ct-runtime) and runs the engine; the manifest is placed at the
+  # snap root where ct-engine looks for $SNAP/plugin.yaml.
+  ct-engine:
+    plugin: dump
+    source: ct-engine/
+    organize:
+      ct_engine.py: bin/ct-engine
+      ct-engine-run: bin/ct-engine-run
+      plugin.yaml: plugin.yaml
+    stage:
+      - bin/ct-engine
+      - bin/ct-engine-run
+      - plugin.yaml
+
+  # Runtime deps for the ct-engine sidecar: python3 to execute the engine and
+  # ca-certificates so its HTTPS callbacks to ct-callback-url verify.
+  ct-runtime:
+    plugin: nil
+    stage-packages:
+      - ca-certificates
+      - python3-minimal

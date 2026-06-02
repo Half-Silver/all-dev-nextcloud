@@ -184,3 +184,10 @@ handle_cronjob_interval
 handle_mode
 handle_http_compression
 handle_notify_push_reverse_proxy
+
+# Control Tower integration: hand the automatic ct-* keys to the engine to
+# validate/persist. Best-effort — must never abort this hook or fail the
+# deploy (the hook runs under `set -e`).
+if [ -x "$SNAP/bin/ct-engine-run" ]; then
+	"$SNAP/bin/ct-engine-run" hook-configure || true
+fi

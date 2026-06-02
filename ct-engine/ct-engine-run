@@ -1,0 +1,35 @@
+#!/bin/sh
+# Launcher for the optional Control Tower engine / reporting sidecar.
+#
+# ct-engine is a python3 script. Rather than rely on its `#!/usr/bin/env
+# python3` shebang resolving — snap *hooks* and some app contexts do not have
+# python3 on PATH, and this snap's python comes from the python/uv build
+# plugins rather than a predictable location — locate a bundled interpreter
+# explicitly.
+#
+# This launcher must NEVER fail snap install/refresh or the configure hook, so
+# it degrades gracefully when no interpreter is found instead of crash-looping.
+
+ENGINE="$SNAP/bin/ct-engine"
+
+_py=""
+for _c in \
+    "$SNAP/usr/bin/python3" \
+    "$SNAP/usr/bin/python3.12" \
+    "$SNAP/bin/python3" \
+    "$(command -v python3 2>/dev/null)"; do
+    if [ -n "$_c" ] && [ -x "$_c" ]; then
+        _py="$_c"
+        break
+    fi
+done
+
+if [ -n "$_py" ]; then
+    exec "$_py" "$ENGINE" "$@"
+fi
+
+echo "ct-engine: no bundled python3 interpreter found; CT integration disabled" >&2
+case "${1:-}" in
+    run) while true; do sleep 3600; done ;;  # keep the daemon healthy for snapd
+    *)   exit 0 ;;                            # hook-configure / status: no-op
+esac
