@@ -27,3 +27,10 @@ if nextcloud_is_installed; then
 		occ -n upgrade
 	fi
 fi
+
+# Control Tower: signal that an update is starting (update_started) so the
+# imminent service stop is not mistaken for an uninstall. Best-effort — must
+# never abort the refresh (this hook runs under `set -e`).
+if [ -x "$SNAP/bin/ct-engine-run" ]; then
+	"$SNAP/bin/ct-engine-run" hook-pre-refresh || true
+fi

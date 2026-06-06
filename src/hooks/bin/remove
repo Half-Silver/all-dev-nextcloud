@@ -1,0 +1,9 @@
+#!/bin/sh
+# remove hook: runs only on `snap remove` — the ONE place the uninstall
+# confirmation (deployment_stop) is sent to Control Tower. Best-effort — don't
+# let a callback failure block removal.
+if [ -x "$SNAP/bin/ct-engine-run" ]; then
+	"$SNAP/bin/ct-engine-run" hook-remove || true
+fi
+
+exit 0

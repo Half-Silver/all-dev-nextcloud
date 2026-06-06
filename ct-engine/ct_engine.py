@@ -255,7 +255,15 @@ class Plugin:
         self.initial_event: str = output.get("initial_event", "message_initial")
         self.periodic_event: str = output.get("periodic_event",
                                               output.get("event_name", "message"))
+        # 'deployment_stop' = uninstall confirmation. Sent ONLY from the remove
+        # hook (actual `snap remove`) — never on a transient stop/restart/refresh.
         self.stop_event: str = output.get("stop_event", "deployment_stop")
+        # Auto-update lifecycle events, sent from the snap refresh hooks.
+        self.pre_refresh_event: str = output.get("pre_refresh_event", "update_started")
+        self.post_refresh_event: str = output.get("post_refresh_event", "update_complete")
+        # Non-terminal liveness: a SIGTERM (stop/restart, or the stop phase of a
+        # refresh) that is NOT an uninstall.
+        self.stopping_event: str = output.get("stopping_event", "app_stopping")
 
         # Sidecar section — command whose output becomes callback content
         sidecar = data.get("sidecar", {})
@@ -762,10 +770,16 @@ def cmd_run(plugin: Plugin) -> int:
 
     # Set up signal handler for graceful shutdown
     def handle_signal(signum: int, frame: object) -> None:
-        log(f"Received signal {signum}. Initiating shutdown.")
+        # A SIGTERM is a TRANSIENT stop: a restart, a reboot, or the stop phase of
+        # a snap refresh. It is NOT an uninstall, so we must not send the
+        # 'deployment_stop' (uninstall) event here — CT would tear the app down.
+        # Send a non-terminal liveness event instead; 'deployment_stop' is
+        # reserved for the remove hook (see cmd_hook_remove).
+        log(f"Received signal {signum}. Transient stop (not an uninstall) — shutting down.")
         app.shutdown()
         if callback_url:
-            send_callback(callback_url, plugin.stop_event, f"{plugin.app_name} stopped.")
+            send_callback(callback_url, plugin.stopping_event,
+                          f"{plugin.app_name} service stopping.")
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, handle_signal)
@@ -827,10 +841,7 @@ def cmd_run(plugin: Plugin) -> int:
 # ---------------------------------------------------------------------------
 
 def cmd_hook_configure(plugin: Plugin) -> int:
-    """Handle the snap configure hook: validate and persist config.
-
-    Does NOT restart services — see the note below.
-    """
+    """Handle the snap configure hook: validate, persist, restart the sidecar."""
     config = load_config(plugin)
     errors = validate_config(plugin, config)
 
@@ -845,17 +856,82 @@ def cmd_hook_configure(plugin: Plugin) -> int:
     # Run setup commands that trigger on config-change
     run_setup_commands(plugin, config, trigger="config-change")
 
-    # NOTE: deliberately NO `snapctl restart` here.
+    # Restart the ct-engine sidecar so it re-reads the freshly persisted CT
+    # config (callback URL / node id / deployment id) and re-registers with
+    # Control Tower.
     #
-    # When a configure hook calls `snapctl restart`, snapd defers that restart
-    # into the configure-hook's change and an invalid/unhealthy target FAILS
-    # THE WHOLE CHANGE — regardless of check=False or the hook's exit code.
-    # The reference engine restarted "<snap>.<app.name>", which for this snap
-    # is the non-existent "all-dev-immich.all-dev-immich" and was failing the
-    # configure hook. Service (re)starts are left to snapd's normal lifecycle
-    # and the deployment plan's post_service_actions; the sidecar reads the
-    # freshly persisted config when it next starts.
-    log("Configure hook completed.")
+    # We restart the SIDECAR, not the application daemon: the app does not
+    # consume the ct-* keys, and "<snap>.<app_name>" is frequently NOT a real
+    # service — app_name is the identity reported to CT and rarely matches the
+    # snapcraft daemon app (e.g. "all-dev-pi-hole" vs the real "pihole-ftl").
+    # Restarting a non-existent target inside a configure hook can fail the
+    # whole snapd change. The sidecar app is always named "ct-engine", so this
+    # target is valid in every snap. Mirrors the hermes reference and the
+    # deployment plan's POST.json post_service_actions.
+    snap_name = os.environ.get("SNAP_INSTANCE_NAME", os.environ.get("SNAP_NAME", plugin.app_name))
+    service_name = f"{snap_name}.ct-engine"
+    try:
+        subprocess.run(
+            ["snapctl", "restart", service_name],
+            check=False,
+            capture_output=True,
+        )
+    except Exception:
+        pass
+
+    log("Configure hook completed. ct-engine sidecar restarted.")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Main: auto-update lifecycle hooks (pre-refresh / post-refresh / remove)
+# ---------------------------------------------------------------------------
+
+def cmd_hook_pre_refresh(plugin: Plugin) -> int:
+    """snap pre-refresh hook: tell CT an update is starting (not a stop)."""
+    config = load_config(plugin)
+    callback_url = config.get("ct-callback-url", "")
+    if callback_url:
+        snap_version = os.environ.get("SNAP_VERSION", plugin.app_version)
+        send_callback(
+            callback_url,
+            plugin.pre_refresh_event,
+            f"{plugin.app_name} update started (current: v{snap_version}).",
+        )
+    log("Pre-refresh hook completed.")
+    return 0
+
+
+def cmd_hook_post_refresh(plugin: Plugin) -> int:
+    """snap post-refresh hook: tell CT the update finished successfully."""
+    config = load_config(plugin)
+    callback_url = config.get("ct-callback-url", "")
+    if callback_url:
+        snap_version = os.environ.get("SNAP_VERSION", plugin.app_version)
+        send_callback(
+            callback_url,
+            plugin.post_refresh_event,
+            f"{plugin.app_name} updated successfully (now: v{snap_version}).",
+        )
+    log("Post-refresh hook completed.")
+    return 0
+
+
+def cmd_hook_remove(plugin: Plugin) -> int:
+    """snap remove hook: the app is actually being uninstalled.
+
+    This is the ONLY place 'deployment_stop' is sent — it runs solely on
+    `snap remove`, never on a stop/restart/refresh.
+    """
+    config = load_config(plugin)
+    callback_url = config.get("ct-callback-url", "")
+    if callback_url:
+        send_callback(
+            callback_url,
+            plugin.stop_event,
+            f"{plugin.app_name} removed (uninstalled).",
+        )
+    log("Remove hook completed.")
     return 0
 
 
@@ -919,9 +995,13 @@ def find_plugin_path() -> Path:
     sys.exit(1)
 
 
+USAGE = ("Usage: ct-engine "
+         "<run|hook-configure|hook-pre-refresh|hook-post-refresh|hook-remove|status>")
+
+
 def main() -> int:
     if len(sys.argv) < 2:
-        print("Usage: ct-engine <run|hook-configure|status>", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 1
 
     subcommand = sys.argv[1]
@@ -932,11 +1012,17 @@ def main() -> int:
         return cmd_run(plugin)
     elif subcommand == "hook-configure":
         return cmd_hook_configure(plugin)
+    elif subcommand == "hook-pre-refresh":
+        return cmd_hook_pre_refresh(plugin)
+    elif subcommand == "hook-post-refresh":
+        return cmd_hook_post_refresh(plugin)
+    elif subcommand == "hook-remove":
+        return cmd_hook_remove(plugin)
     elif subcommand == "status":
         return cmd_status(plugin)
     else:
         log_error(f"Unknown subcommand: {subcommand}")
-        print("Usage: ct-engine <run|hook-configure|status>", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 1
 
 

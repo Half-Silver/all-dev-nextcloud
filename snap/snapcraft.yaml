@@ -134,6 +134,10 @@ hooks:
     plugs: [network, network-bind, removable-media]
   pre-refresh:
     plugs: [network, network-bind, removable-media]
+  post-refresh:
+    plugs: [network]
+  remove:
+    plugs: [network]
 
 parts:
   apache:
