@@ -264,6 +264,11 @@ class Plugin:
         # Non-terminal liveness: a SIGTERM (stop/restart, or the stop phase of a
         # refresh) that is NOT an uninstall.
         self.stopping_event: str = output.get("stopping_event", "app_stopping")
+        # Fast "the app is installed and booting" ping. Emitted as the VERY FIRST
+        # callback — before setup commands and before message_initial — so Control
+        # Tower shows liveness as soon as the snap is installed, instead of waiting
+        # for setup + the initial status gather to finish.
+        self.started_event: str = output.get("started_event", "app_started")
 
         # Sidecar section — command whose output becomes callback content
         sidecar = data.get("sidecar", {})
@@ -379,6 +384,18 @@ def load_config(plugin: Plugin) -> dict[str, str]:
                 value = str(props["default"])
 
         config[key] = value
+
+    # ct-snap-name is part of the snap's runtime identity, not something Control
+    # Tower pushes in snap_config (it only sends ct-node-id / ct-callback-url /
+    # ct-deployment-id). Derive it from the snap environment so it is always
+    # populated — otherwise it logs as "(unset)" and any {ct-snap-name}
+    # interpolation in plugin.yaml resolves to an empty string.
+    if not config.get("ct-snap-name"):
+        config["ct-snap-name"] = (
+            os.environ.get("SNAP_INSTANCE_NAME")
+            or os.environ.get("SNAP_NAME")
+            or plugin.app_name
+        )
 
     return config
 
@@ -619,6 +636,17 @@ def gather_sidecar_status(plugin: Plugin, config: dict[str, str]) -> str:
     return f"{plugin.app_name} sidecar running"
 
 
+def status_message(plugin: Plugin, config: dict[str, str], fallback: str) -> str:
+    """Best-effort human status for a callback.
+
+    In sidecar mode with a status_command (e.g. the live URL) we report that;
+    otherwise we use the provided fallback string.
+    """
+    if not plugin.run_command and plugin.sidecar_status_command:
+        return gather_sidecar_status(plugin, config)
+    return fallback
+
+
 # ---------------------------------------------------------------------------
 # App Launcher
 # ---------------------------------------------------------------------------
@@ -742,6 +770,16 @@ def cmd_run(plugin: Plugin) -> int:
 
     callback_url = config.get("ct-callback-url", "")
 
+    # Fast liveness ping: the snap is installed and the engine is up. Sent BEFORE
+    # setup commands and message_initial so Control Tower reflects "app started"
+    # immediately rather than after setup + the initial status gather. Fires on
+    # every (re)start of the sidecar, mirroring message_initial.
+    if callback_url:
+        started_msg = status_message(
+            plugin, config, f"{plugin.app_name} v{plugin.app_version} installed and starting."
+        )
+        send_callback(callback_url, plugin.started_event, started_msg)
+
     # Run setup commands
     if not run_setup_commands(plugin, config, trigger="config-change"):
         log_error("Setup commands failed. Refusing to start app.")
@@ -751,10 +789,9 @@ def cmd_run(plugin: Plugin) -> int:
 
     # Send initial callback (message_initial in CT)
     if callback_url:
-        if not plugin.run_command and plugin.sidecar_status_command:
-            initial_msg = gather_sidecar_status(plugin, config)
-        else:
-            initial_msg = f"{plugin.app_name} v{plugin.app_version} started."
+        initial_msg = status_message(
+            plugin, config, f"{plugin.app_name} v{plugin.app_version} started."
+        )
         send_callback(callback_url, plugin.initial_event, initial_msg)
 
     # Launch the app (or run in sidecar mode)
